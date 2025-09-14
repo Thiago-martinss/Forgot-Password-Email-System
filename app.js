@@ -12,15 +12,13 @@ app.set('views', path.join(__dirname, 'views'));
 
 // EJS Layout setup
 app.use(expressLayouts);
-app.set("layout", "layout");
-app.set("layout extractScripts", true);
-app.set("layout extractStyles", true);
+app.set('layout', 'layout');
+app.set('layout extractScripts', true);
+app.set('layout extractStyles', true);
 
 // MongoDB connection
 mongoose
-  .connect(
-    process.env.MONGODB_URI
-  )
+  .connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
@@ -33,9 +31,22 @@ const userSchema = new mongoose.Schema({
 });
 
 // Routes
-app.get("/", (req, res) => {
-  res.render("index");
+app.get('/', (req, res) => {
+  res.render('index');
 });
+
+// Login routes
+app.get('/login', (req, res) => {
+  if (req.session.userId) {
+    return res.redirect('/dashboard');
+  }
+  res.render('login');
+});
+
+app.get("/register", (req, res) => {
+  res.render("register");
+});
+
 
 // Start server
 const PORT = process.env.PORT || 3000;
