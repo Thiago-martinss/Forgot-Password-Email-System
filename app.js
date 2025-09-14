@@ -62,6 +62,14 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Authentication middleware
+const isAuthenticated = (req, res, next) => {
+  if (req.session.userId) {
+    return next();
+  }
+  res.redirect('/login');
+};
+
 // Routes
 app.get('/', (req, res) => {
   res.render('index');
