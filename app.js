@@ -1,12 +1,31 @@
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
+const session = require('express-session');
 const path = require('path');
 const mongoose = require('mongoose');
 const expressLayouts = require('express-ejs-layouts');
 const bcrypt = require('bcryptjs');
 
 const app = express();
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
+
+// Session middleware
+app.use(
+  session({
+    secret: process.env.JWT_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
 
 // View engine setup
 app.set('view engine', 'ejs');
@@ -32,11 +51,11 @@ const userSchema = new mongoose.Schema({
   resetPasswordExpires: Date,
 });
 
-const User = mongoose.model("User", userSchema);
+const User = mongoose.model('User', userSchema);
 
 // Email transporter setup
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -54,6 +73,38 @@ app.get('/login', (req, res) => {
     return res.redirect('/dashboard');
   }
   res.render('login');
+});
+
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.render('login', {
+        error: 'Invalid email or password',
+        email: email,
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.render('login', {
+        error: 'Invalid email or password',
+        email: email,
+      });
+    }
+
+    // Set session
+    req.session.userId = user._id;
+    res.redirect('/dashboard');
+  } catch (error) {
+    console.error('Login error:', error);
+    res.render('login', {
+      error: 'Error during login. Please try again.',
+      email: req.body.email,
+    });
+  }
 });
 
 app.get('/register', (req, res) => {
