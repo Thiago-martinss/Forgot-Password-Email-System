@@ -18,7 +18,7 @@ app.use(express.static('public'));
 // Session middleware
 app.use(
   session({
-    secret: process.env.JWT_SECRET,
+    secret: process.env.JWT_SECRET || 'your-secret-key',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -40,7 +40,9 @@ app.set('layout extractStyles', true);
 
 // MongoDB connection
 mongoose
-  .connect(process.env.MONGODB_URI)
+  .connect(
+    process.env.MONGODB_URI
+  )
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
@@ -63,6 +65,11 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Routes
+app.get('/', (req, res) => {
+  res.render('index');
+});
+
 // Authentication middleware
 const isAuthenticated = (req, res, next) => {
   if (req.session.userId) {
@@ -70,11 +77,6 @@ const isAuthenticated = (req, res, next) => {
   }
   res.redirect('/login');
 };
-
-// Routes
-app.get('/', (req, res) => {
-  res.render('index');
-});
 
 // Login routes
 app.get('/login', (req, res) => {
@@ -124,6 +126,17 @@ app.get('/logout', (req, res) => {
     }
     res.redirect('/');
   });
+});
+
+// Dashboard route (protected)
+app.get('/dashboard', isAuthenticated, async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    res.render('dashboard', { user });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.redirect('/login');
+  }
 });
 
 app.get('/register', (req, res) => {
@@ -242,6 +255,61 @@ app.post('/forgot-password', async (req, res) => {
 
 app.get('/reset-password/:token', (req, res) => {
   res.render('reset-password', { token: req.params.token });
+});
+
+app.post('/reset-password/:token', async (req, res) => {
+  try {
+    const { password, confirmPassword } = req.body;
+    const token = req.params.token;
+
+    if (password !== confirmPassword) {
+      return res.render('reset-password', {
+        token: token,
+        error: 'Passwords do not match',
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findOne({
+      _id: decoded.id,
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.render('reset-password', {
+        token: token,
+        error: 'Invalid or expired token. Please request a new password reset.',
+      });
+    }
+
+    // Update password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.render('reset-password', {
+      token: token,
+      success:
+        'Password has been reset successfully. You can now login with your new password.',
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.render('reset-password', {
+      token: req.params.token,
+      error: 'Error resetting password. Please try again.',
+    });
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).render('error', {
+    error: 'Something went wrong! Please try again later.',
+  });
 });
 
 // Start server
