@@ -115,6 +115,16 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// Logout route
+app.get('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+    }
+    res.redirect('/');
+  });
+});
+
 app.get('/register', (req, res) => {
   res.render('register');
 });
