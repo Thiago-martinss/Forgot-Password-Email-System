@@ -1,11 +1,12 @@
-require('dotenv').config();
 const express = require('express');
-const nodemailer = require('nodemailer');
-const session = require('express-session');
 const path = require('path');
 const mongoose = require('mongoose');
-const expressLayouts = require('express-ejs-layouts');
+const nodemailer = require('nodemailer');
+const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const expressLayouts = require('express-ejs-layouts');
+require('dotenv').config();
 
 const app = express();
 
@@ -185,6 +186,62 @@ app.post('/register', async (req, res) => {
       email: req.body.email,
     });
   }
+});
+
+app.get('/forgot-password', (req, res) => {
+  res.render('forgot-password');
+});
+
+app.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.render('forgot-password', {
+        error: 'No account with that email address exists.',
+        email: email,
+      });
+    }
+
+    // Generate reset token
+    const resetToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
+
+    // Save token to user
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    // Send email
+    const resetUrl = `http://${req.headers.host}/reset-password/${resetToken}`;
+    const mailOptions = {
+      to: user.email,
+      subject: 'Password Reset',
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>You requested a password reset. Click the link below to reset your password:</p>
+        <a href="${resetUrl}">${resetUrl}</a>
+        <p>This link will expire in 1 hour.</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.render('forgot-password', {
+      success: 'Password reset email sent. Please check your inbox.',
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.render('forgot-password', {
+      error: 'Error processing request. Please try again.',
+      email: req.body.email,
+    });
+  }
+});
+
+app.get('/reset-password/:token', (req, res) => {
+  res.render('reset-password', { token: req.params.token });
 });
 
 // Start server
